@@ -5,10 +5,10 @@
 #
 # Usage:
 #   STELLAR_SECRET_KEY=<key> ./scripts/deploy.sh testnet
-#   STELLAR_SECRET_KEY=<key> DEPLOY_CONFIRM=deploy ./scripts/deploy.sh mainnet
+#   STELLAR_SIGNER=acbu-mainnet-deployer DEPLOY_CONFIRM=deploy ./scripts/deploy.sh mainnet
 #
 # Non-interactive CI usage (mainnet):
-#   STELLAR_SECRET_KEY=<key> DEPLOY_CONFIRM=deploy ./scripts/deploy.sh mainnet
+#   STELLAR_SIGNER=<configured-identity> DEPLOY_CONFIRM=deploy ./scripts/deploy.sh mainnet
 #
 # Initialisation parameters (real addresses — never TODO_/placeholders) are
 # read from the environment, or from a file via DEPLOY_ENV_FILE=<path>:
@@ -51,8 +51,15 @@ if [[ "$NETWORK" != "testnet" && "$NETWORK" != "mainnet" ]]; then
     error "Invalid network '${NETWORK}'. Must be 'testnet' or 'mainnet'."
 fi
 
-if [[ -z "${STELLAR_SECRET_KEY:-}" ]]; then
-    error "STELLAR_SECRET_KEY is not set. Export it before running this script."
+if [[ "$NETWORK" == "mainnet" ]]; then
+    if [[ -n "${STELLAR_SECRET_KEY:-}" ]]; then
+        error "Raw STELLAR_SECRET_KEY values are forbidden for mainnet. Configure an MPC/HSM, hardware-wallet, or quorum-controlled Stellar CLI identity and pass its name via STELLAR_SIGNER."
+    fi
+    [[ -n "${STELLAR_SIGNER:-}" ]] || error "STELLAR_SIGNER is required for mainnet."
+    DEPLOY_SOURCE_ACCOUNT="$STELLAR_SIGNER"
+else
+    DEPLOY_SOURCE_ACCOUNT="${STELLAR_SIGNER:-${STELLAR_SECRET_KEY:-}}"
+    [[ -n "$DEPLOY_SOURCE_ACCOUNT" ]] || error "Set STELLAR_SIGNER or STELLAR_SECRET_KEY before deploying to testnet."
 fi
 
 # ---------------------------------------------------------------------------
@@ -277,7 +284,7 @@ deploy_contract() {
     contract_id=$(
         "$STELLAR_CLI" contract deploy \
             --wasm "$wasm" \
-            --source-account "$STELLAR_SECRET_KEY" \
+            --source-account "$DEPLOY_SOURCE_ACCOUNT" \
             --network-passphrase "$NETWORK_PASSPHRASE" \
             --rpc-url "$RPC_URL" \
             2>/dev/null
@@ -356,7 +363,7 @@ invoke_initialize() {
     local output
     if ! output=$("$STELLAR_CLI" contract invoke \
             --id "$contract_id" \
-            --source-account "$STELLAR_SECRET_KEY" \
+            --source-account "$DEPLOY_SOURCE_ACCOUNT" \
             --network-passphrase "$NETWORK_PASSPHRASE" \
             --rpc-url "$RPC_URL" \
             -- initialize "$@" 2>&1); then
