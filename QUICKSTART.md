@@ -68,14 +68,14 @@ Savings Vault and Multisig are part of this run — see
 ```bash
 export STELLAR_NETWORK="testnet"
 export STELLAR_SECRET_KEY="your-secret-key"
-export CONTRACT_ORACLE="<oracle-contract-id>"
-export CONTRACT_RESERVE_TRACKER="<reserve-tracker-contract-id>"
-export CONTRACT_MINTING="<minting-contract-id>"
-export CONTRACT_BURNING="<burning-contract-id>"
-export CONTRACT_SAVINGS_VAULT="<savings-vault-contract-id>"
-export CONTRACT_LENDING_POOL="<lending-pool-contract-id>"
-export CONTRACT_ESCROW="<escrow-contract-id>"
-export CONTRACT_MULTISIG="<multisig-contract-id>"
+export CONTRACT_ORACLE_TESTNET="<oracle-contract-id>"
+export CONTRACT_RESERVE_TRACKER_TESTNET="<reserve-tracker-contract-id>"
+export CONTRACT_MINTING_TESTNET="<minting-contract-id>"
+export CONTRACT_BURNING_TESTNET="<burning-contract-id>"
+export CONTRACT_SAVINGS_VAULT_TESTNET="<savings-vault-contract-id>"
+export CONTRACT_LENDING_POOL_TESTNET="<lending-pool-contract-id>"
+export CONTRACT_ESCROW_TESTNET="<escrow-contract-id>"
+export CONTRACT_MULTISIG_TESTNET="<multisig-contract-id>"
 ```
 
 ### 5. Use in Backend

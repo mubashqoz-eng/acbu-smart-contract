@@ -12,7 +12,7 @@
 |--------|-------------------|
 | **CI (preferred)** | GitHub Actions → *Deploy Contracts* → *Run workflow* |
 | **Local testnet** | `STELLAR_SECRET_KEY=<key> make deploy-testnet` |
-| **Local mainnet** | `STELLAR_SECRET_KEY=<key> DEPLOY_CONFIRM=deploy make deploy-mainnet` |
+| **Local mainnet** | `STELLAR_SIGNER=<hardware-or-MPC-identity> DEPLOY_CONFIRM=deploy make deploy-mainnet` |
 | **Registry** | `deployments/registry.json` (committed to git after every deploy) |
 
 ---
@@ -89,8 +89,8 @@ make deploy-testnet
 ### Mainnet
 
 ```bash
-export STELLAR_SECRET_KEY="S..."   # your mainnet secret key
-export DEPLOY_CONFIRM=deploy        # explicit opt-in guard
+export STELLAR_SIGNER="acbu-mainnet-deployer" # preconfigured hardware/MPC identity
+export DEPLOY_CONFIRM=deploy                 # explicit opt-in guard
 make deploy-mainnet
 ```
 
@@ -100,7 +100,8 @@ the network.
 
 ### What the script does
 
-1. Validates environment (`STELLAR_SECRET_KEY`, `DEPLOY_CONFIRM` for mainnet).
+1. Validates the signer (`STELLAR_SECRET_KEY` or `STELLAR_SIGNER` on testnet;
+   hardware/MPC-backed `STELLAR_SIGNER` plus `DEPLOY_CONFIRM` on mainnet).
 2. Loads and validates initialisation parameters (see
    [Initialisation parameters](#initialisation-parameters)) **before** any XLM
    is spent — empty or `TODO_*` / `<...>` placeholder values abort the run.
@@ -133,10 +134,10 @@ shell history).
 ```bash
 # Either export the variables…
 export ACBU_TOKEN_ID=C… USDC_TOKEN_ID=C… …
-STELLAR_SECRET_KEY=S… ./scripts/deploy.sh mainnet
+STELLAR_SIGNER=acbu-mainnet-deployer DEPLOY_CONFIRM=deploy ./scripts/deploy.sh mainnet
 
 # …or keep them in a file (e.g. an untracked/secrets-managed file):
-STELLAR_SECRET_KEY=S… DEPLOY_ENV_FILE=.deploy.env ./scripts/deploy.sh mainnet
+STELLAR_SIGNER=acbu-mainnet-deployer DEPLOY_ENV_FILE=.deploy.env DEPLOY_CONFIRM=deploy ./scripts/deploy.sh mainnet
 ```
 
 Validation runs **before** the build/deploy phase and rejects:
@@ -195,10 +196,14 @@ deploying anything.
 1. Go to **Settings → Environments** in the GitHub repo.
 2. Create two environments: `testnet` and `mainnet`.
 3. For `mainnet`: add **Required reviewers** and a **Deployment branch filter** (e.g. `main`).
-4. In each environment, add the secret:
+4. In `testnet`, add the environment secret:
    ```
-   STELLAR_SECRET_KEY = <network-specific stellar secret key>
+   STELLAR_SECRET_KEY = <testnet stellar secret key>
    ```
+5. Register a self-hosted runner with the `mainnet-signer` label. Configure a
+   Stellar CLI identity backed by an MPC/HSM, hardware wallet, or enforced
+   signer quorum; do not place its seed in GitHub. Set the mainnet environment
+   variable `MAINNET_SIGNER_IDENTITY` to that identity name.
 
 ### Running a deploy
 
@@ -210,7 +215,9 @@ deploying anything.
 The workflow:
 
 - **guard** job — validates the confirmation input before any compute starts.
-- **deploy** job — installs Rust + Stellar CLI, builds with `--locked`,
+- **deploy** job — runs behind the selected GitHub Environment approval,
+  installs a pinned checksummed Stellar CLI, signs the WASM checksum manifest,
+  uses the dedicated signer runner for mainnet, builds with `--locked`,
   runs `scripts/deploy.sh`, commits the updated registry back to the
   source branch (`[skip ci]` tag prevents an infinite loop), and uploads
   `deployments/*.json` as a 90-day run artifact.
@@ -278,8 +285,8 @@ print(r['networks']['testnet']['contracts']['minting'])
 `scripts/deploy.sh` runs the `initialize` calls listed below automatically,
 using the validated values from [Initialisation parameters](#initialisation-parameters).
 The commands are kept here for reference and for recovering a deployment that
-ran with `SKIP_INIT=1`.  These calls require the deployer key (same
-`STELLAR_SECRET_KEY`).
+ran with `SKIP_INIT=1`. These calls require the configured deployer identity
+(`STELLAR_SIGNER`) or, on testnet only, `STELLAR_SECRET_KEY`.
 
 > **Note:** Replace all `<...>` placeholders with real addresses from the
 > registry or your token infrastructure — never commit them.
@@ -443,19 +450,20 @@ stellar contract invoke \
 
 | Error | Likely cause | Fix |
 |-------|--------------|-----|
-| `STELLAR_SECRET_KEY is not set` | Missing env var | `export STELLAR_SECRET_KEY="S..."` |
+| `Set STELLAR_SIGNER or STELLAR_SECRET_KEY` | Missing testnet signer | Configure either a CLI identity or a testnet-only seed |
+| `STELLAR_SIGNER is required for mainnet` | Missing protected signer identity | Configure the MPC/HSM or hardware-backed CLI identity on the `mainnet-signer` runner |
 | `DEPLOY_CONFIRM is not set` | Mainnet guard triggered | `export DEPLOY_CONFIRM=deploy` |
 | `Unexpected output for Oracle deploy` | CLI version mismatch or invalid key | Check `stellar --version`; validate key is a valid secret (starts with `S`) |
 | `WASM artifact not found` | Build didn't produce .wasm | Run `cargo build --locked --target wasm32-unknown-unknown --release` first |
 | `Insufficient balance` | Not enough XLM for fees | Fund account via Friendbot (testnet) or purchase XLM (mainnet) |
 | `Contract already initialized` | Re-initialization attempted | Deploy a new contract instance |
-| `Unauthorized` | Wrong admin key | Ensure `STELLAR_SECRET_KEY` matches the initialised admin address |
+| `Unauthorized` | Wrong admin signer | Ensure the configured signer identity matches the initialised admin address |
 
 ---
 
 ## Security notes
 
-1. **Never commit secret keys.** Use environment variables or CI secrets.
+1. **Never commit secret keys.** Mainnet deployment rejects raw keys and uses a protected signer identity.
 2. `deployments/registry.json` contains **only contract IDs** — no secrets.
 3. Use the **multisig contract** for all admin operations in production.
 4. The `.soroban/` directory is gitignored — only `deployments/` is tracked.
